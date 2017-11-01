@@ -102,8 +102,8 @@ public class GameBoard {
                     isMouseClicked = true;
                 }else if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE){
                     isMouseClicked = false;
-                    drawnPoints.add(null);
-                    drawnPoints.add(null);
+                    addSeparatorToDrawnList();
+                    reportDrawnPoint(Double.MAX_VALUE, Double.MAX_VALUE);
                 }
             }
         });
@@ -175,6 +175,11 @@ public class GameBoard {
         }
         drawnPoints.add(x);
         drawnPoints.add(y);
+    }
+
+    public void addSeparatorToDrawnList(){
+        drawnPoints.add(null);
+        drawnPoints.add(null);
     }
 
     private void addMakeupPoints(double prevX, double prevY, double curX, double curY){

@@ -59,7 +59,13 @@ public class GraphicInterface {
             logger.warn("cant draw point with following coord: {}", coord);
             return;
         }
-        board.addPointToDrawnList(Double.parseDouble(splited[0]), Double.parseDouble(splited[1]));
+        double x = Double.parseDouble(splited[0]);
+        double y = Double.parseDouble(splited[1]);
+        if(x == Double.MAX_VALUE && y == Double.MAX_VALUE){
+            board.addSeparatorToDrawnList();
+        }else{
+            board.addPointToDrawnList(x, y);
+        }
     }
 
     // reports from game board to client
