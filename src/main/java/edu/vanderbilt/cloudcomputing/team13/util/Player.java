@@ -1,4 +1,4 @@
-package vanderbilt.cloudcomputing.team13.util;
+package edu.vanderbilt.cloudcomputing.team13.util;
 
 /**
  * Created by Chuilian Kong on 10/30/2017.
@@ -25,5 +25,9 @@ public class Player {
 
     public boolean isReady() {
         return isReady;
+    }
+
+    public String getId() {
+        return id;
     }
 }

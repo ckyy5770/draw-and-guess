@@ -1,4 +1,4 @@
-package vanderbilt.cloudcomputing.team13.util;
+package edu.vanderbilt.cloudcomputing.team13.util;
 
 /**
  * Created by Chuilian Kong on 10/31/2017.

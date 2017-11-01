@@ -1,10 +1,11 @@
-package vanderbilt.cloudcomputing.team13.server;
+package edu.vanderbilt.cloudcomputing.team13.server;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.zeromq.ZMQ;
-import vanderbilt.cloudcomputing.team13.util.AbstractAction;
-import vanderbilt.cloudcomputing.team13.util.Player;
+import edu.vanderbilt.cloudcomputing.team13.client.GameBoard;
+import edu.vanderbilt.cloudcomputing.team13.util.AbstractAction;
+import edu.vanderbilt.cloudcomputing.team13.util.Player;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -88,6 +89,7 @@ public class GameServer implements Runnable{
             //  Wait for next request from client
             byte[] request = gameResponder.recv(0);
             String reqStr = new String(request);
+            logger.debug("request received: {}", reqStr);
             tryRespond(reqStr);
         }
     }
@@ -96,15 +98,17 @@ public class GameServer implements Runnable{
         String[] splited = reqStr.split("@");
         AbstractAction handler = requestHandler.get(splited[0]);
         if(handler == null){
-            logger.warn("invalid request: {reqStr}");
+            logger.warn("invalid request: {}", reqStr);
             gameResponder.send("ERROR");
         }else{
+            gameResponder.send("OK");
             handler.setPara(splited[1]);
             threadPool.submit(handler);
         }
     }
 
     private void initRequestHandler(){
+        requestHandler = new HashMap<>();
         requestHandler.put("CliNewPoint", new publishNewPoint());
         requestHandler.put("CliNewWinner", new publishNewWinner());
         requestHandler.put("CliNewPlayer", new setupNewPlayer());
@@ -124,9 +128,9 @@ public class GameServer implements Runnable{
             if(para == null){
                 logger.warn("invalid parameter for publishNewPoint.");
             }else{
+                logger.debug("publishing new point: {}", para);
                 gamePub.sendMore("ServerNewPoint");
                 gamePub.send(para);
-                gameResponder.send("OK");
             }
         }
     }
@@ -148,9 +152,6 @@ public class GameServer implements Runnable{
                 if(!isGameEnd){
                     gamePub.sendMore("ServerNewWinner");
                     gamePub.send(para);
-                    gameResponder.send("OK");
-                }else{
-                    gameResponder.send("ERROR");
                 }
             }
         }
@@ -173,9 +174,6 @@ public class GameServer implements Runnable{
                 if (playersMap.size() <= MAX_PLAYER) {
                     gamePub.sendMore("ServerNewPlayer");
                     gamePub.send(para);
-                    gameResponder.send("OK");
-                }else{
-                    gameResponder.send("ERROR");
                 }
             }
         }
@@ -200,7 +198,6 @@ public class GameServer implements Runnable{
                 // if all players are ready, start the game
                 for(Map.Entry<String, Player> entry : playersMap.entrySet()){
                     if(!entry.getValue().isReady()){
-                        gameResponder.send("OK");
                         return;
                     }
                 }
@@ -221,9 +218,12 @@ public class GameServer implements Runnable{
 
                 gamePub.sendMore("ServerNewGame");
                 gamePub.send(pickedPlayerID + "%"+ pickedWord);
-                gameResponder.send("OK");
             }
         }
+    }
+
+    public static void main(String[] args) {
+        new GameServer(args[0]).run();
     }
 
 }
