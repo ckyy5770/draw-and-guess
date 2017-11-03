@@ -10,7 +10,7 @@ there are 4 types of requests that server need to response:
 
 3. "CliNewPlayer@USER_ID%USER_IP%USER_NAME" from players: upon receiving this request, the server should see if there is enough space for the new player, if there is not, reject the player.
 
-4. "CliPlayerReady@USER_ID" from players: upon receiving this request, the server should mark this play to be ready to play, if all players are ready, then start the game.
+4. "CliPlayerReady@USER_ID%(1 or 0)" from players: upon receiving this request, the server should mark this play to be ready to play, if all players are ready, then start the game.
 
 there are 5 types of messages that server may send:
 

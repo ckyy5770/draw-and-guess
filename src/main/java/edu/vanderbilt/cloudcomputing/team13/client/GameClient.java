@@ -33,8 +33,6 @@ public class GameClient implements Runnable{
     private ZMQ.Socket gameSub;
     // a requester to the game server
     private ZMQ.Socket gameRequester;
-    // a list of players <id, player>
-    private ConcurrentHashMap<String, Player> playersMap;
 
     // thread pool
     private ExecutorService threadPool;
@@ -44,11 +42,7 @@ public class GameClient implements Runnable{
     private boolean isClientStop = false;
 
     // game specs
-    private int MAX_PLAYER = 5;
-    private boolean isGameEnd = true;
-    private String word = null;
-    private String playerId = null;
-    private boolean isDrawer = false;
+    private GameState gameState = new GameState();
 
     // graphic interface
     private GraphicInterface gui = null;
@@ -69,7 +63,7 @@ public class GameClient implements Runnable{
         initCommandHandler();
 
         gui = new GraphicInterface();
-        GameBoard board = new GameBoard(gui);
+        GameBoard board = new GameBoard(gui, gameState);
         gui.init(this, board);
 
         initGame(playerName);
@@ -140,12 +134,11 @@ public class GameClient implements Runnable{
 
 
     private void initGame(String playerName){
-        playerId = ip + ":" + playerName;
-        Player player = new Player(ip, playerName, playerId);
-        gui.addPlayer(playerId);
-        isGameEnd = true;
+        gameState.addPlayerMySelf(ip, playerName, ip + ":" + playerName);
+        gameState.setGameEnd(true);
 
         AbstractAction action = commandHandler.get("CliNewPlayer");
+        String playerId = ip + ":" + playerName;
         action.setPara(playerId + "%" + ip + "%" + playerName);
         threadPool.submit(action);
     }
@@ -162,6 +155,7 @@ public class GameClient implements Runnable{
         commandHandler.put("ServerNewWinner", new setupNewWinner());
         commandHandler.put("ServerPlayerReady", new setPlayerReady());
         commandHandler.put("ServerNewPoint", new drawNewPoint());
+        commandHandler.put("ServerNewGame", new startNewGame());
     }
 
     private class reportNewPoint extends AbstractAction{
@@ -272,10 +266,7 @@ public class GameClient implements Runnable{
                 String playerId = splited[0];
                 String playerIp = splited[1];
                 String playerName = splited[2];
-                Player newPlayer = new Player(playerIp, playerName, playerId);
-                playersMap.put(newPlayer.getId(), newPlayer);
-
-                gui.addPlayer(playerId);
+                gameState.addPlayer(playerIp, playerName, playerId);
             }
         }
     }
@@ -293,14 +284,12 @@ public class GameClient implements Runnable{
             if (para == null) {
                 logger.warn("invalid parameter for setupNewWinner: null");
             } else {
-                gui.setPlayerWin(para);
+                gameState.setWinnerId(para);
 
                 // reset game state, clear ready state
-                isGameEnd = true;
-                for(Map.Entry<String, Player> entry : playersMap.entrySet()){
-                    entry.getValue().cancelReady();
-                    gui.cancelPlayerReady(entry.getKey());
-                }
+                gameState.setGameEnd(true);
+                gameState.clearReady();
+                gameState.clearDrawer();
             }
         }
     }
@@ -318,13 +307,9 @@ public class GameClient implements Runnable{
             if (para == null) {
                 logger.warn("invalid parameter for setPlayerReady: null");
             } else {
-                Player player = playersMap.get(para);
-                if(player == null){
-                    logger.warn("invalid parameter for setPlayerReady: {}", para);
-                    return;
-                }
-                player.setReady();
-                gui.setPlayerReady(para);
+                String[] splited = para.split("%");
+                int readyState = Integer.parseInt(splited[1]);
+                gameState.setPlayerReady(splited[0], readyState != 0);
             }
         }
     }
@@ -345,6 +330,29 @@ public class GameClient implements Runnable{
                 gui.drawPoint(para);
             }
         }
+    }
+
+    private class startNewGame extends AbstractAction{
+        String para = null;
+
+        @Override
+        public void setPara(String para) {
+            this.para = para;
+        }
+
+        @Override
+        public void run() {
+            if(para == null){
+                logger.warn("invalid parameter for startNewGame: null");
+            }else{
+                String[] splited = para.split("%");
+                String drawerId = splited[0];
+                String word = splited[1];
+                gameState.startNewGame(drawerId, word);
+                logger.info("new game started. drawerId: {}, word: {}", drawerId, word);
+            }
+        }
+
     }
 
     public static void main(String[] args) {

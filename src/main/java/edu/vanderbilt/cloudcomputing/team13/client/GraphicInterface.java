@@ -25,34 +25,6 @@ public class GraphicInterface {
         board.run();
     }
 
-    public void setThisDrawer(){
-        board.setThisDrawer();
-    }
-
-    public void cancelDrawer(){
-        board.cancelDrawer();
-    }
-
-    public void clearBoard(){
-        board.clearCanvas();
-    }
-
-    public void addPlayer(String playerId){
-
-    }
-
-    public void setPlayerWin(String playerId){
-
-    }
-
-    public void setPlayerReady(String playerId){
-
-    }
-
-    public void cancelPlayerReady(String playerId){
-
-    }
-
     public void drawPoint(String coord){
         String[] splited = coord.split("%");
         if(splited.length != 2){
@@ -71,6 +43,11 @@ public class GraphicInterface {
     // reports from game board to client
     public void reportDrawnPoint(double x, double y){
         String str = "CliNewPoint@" + Double.toString(x) + "%" + Double.toString(y);
+        client.makeRequest(str);
+    }
+
+    public void reportPlayerReady(String playerId, boolean isReady){
+        String str = "CliPlayerReady@" + playerId + "%" + (isReady ? "1" : "0");
         client.makeRequest(str);
     }
 }

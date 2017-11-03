@@ -192,7 +192,12 @@ public class GameServer implements Runnable{
             if (para == null) {
                 logger.warn("invalid parameter for setPlayerReady.");
             } else {
-                playersMap.get(para).setReady();
+                // if the game is on-going, omit this one.
+                if(!isGameEnd) return;
+
+                String[] splited = para.split("%");
+                int readyState = Integer.parseInt(splited[1]);
+                playersMap.get(splited[0]).setReady(readyState != 0);
                 gamePub.sendMore("ServerPlayerReady");
                 gamePub.send(para);
                 // if all players are ready, start the game

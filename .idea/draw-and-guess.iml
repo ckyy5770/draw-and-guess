@@ -15,5 +15,6 @@
     <orderEntry type="library" name="lwjgl-opengl" level="project" />
     <orderEntry type="library" name="lwjgl" level="project" />
     <orderEntry type="library" name="log4j-core-2.9.1" level="project" />
+    <orderEntry type="library" name="slick" level="project" />
   </component>
 </module>

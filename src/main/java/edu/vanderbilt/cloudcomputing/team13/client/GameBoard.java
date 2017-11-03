@@ -3,16 +3,23 @@
  */
 package edu.vanderbilt.cloudcomputing.team13.client;
 
+import java.awt.*;
+import java.io.InputStream;
+import java.io.File;
+import java.nio.DoubleBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
-import org.lwjgl.Version;
+import com.sun.xml.internal.bind.v2.TODO;
+import edu.vanderbilt.cloudcomputing.team13.util.GraphicUtils;
+import edu.vanderbilt.cloudcomputing.team13.util.Player;
+import org.lwjgl.BufferUtils;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
-import sun.jvm.hotspot.HelloWorld;
 
 import static org.lwjgl.glfw.Callbacks.glfwFreeCallbacks;
 import static org.lwjgl.glfw.GLFW.*;
@@ -21,18 +28,25 @@ import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
 
 
-
 public class GameBoard {
     // use this bi-directional interface to communicate with client
     GraphicInterface graphicInterface;
 
     // game specs
-    private boolean isDrawer = true;
+    private GameState gameState = null;
 
     // The window handle
     private long window;
     private int windowWidth = 800;
     private int windowHeight = 600;
+
+    // player display frame center, player 0, centerY -> playerFrameCenter[0][1]
+    private double[][] playerFrameCenter = null;
+    private double playerFrameSideWidth = 0.0;
+    private double readyButtonWidth = 80.0;
+    private double readyButtonSpace = 300.0;
+    private double gameFrameOffset = 20;
+    private double[][] drawableRegion = null;
 
     // isMouseClicked
     private boolean isMouseClicked = false;
@@ -42,8 +56,13 @@ public class GameBoard {
     // a set of points that the player has drawn
     private List<Double> drawnPoints = new ArrayList<>();
 
-    public GameBoard(GraphicInterface graphicInterface){
+    public GameBoard(GraphicInterface graphicInterface, GameState gameState){
         this.graphicInterface = graphicInterface;
+        this.gameState = gameState;
+        this.playerFrameCenter = new double[gameState.getMAX_PLAYER()][2];
+
+        //gameState.addPlayer("127.0.0.1", "cathy", "0001");
+        //gameState.addPlayer("127.0.0.1", "unays", "0002");
     }
 
     public void run() {
@@ -88,7 +107,7 @@ public class GameBoard {
 
         // Setup a cursor position callback, it will be called every time the cursor is moved
         glfwSetCursorPosCallback(window, (window, xpos, ypos) -> {
-            if(isDrawer && isMouseClicked){
+            if(gameState.isDrawer() && withinDrawableRegion(xpos, ypos) && isMouseClicked){
                 addPointToDrawnList(xpos, ypos);
                 reportDrawnPoint(xpos, ypos);
                 //System.out.printf("%f, %f\n", xpos, ypos);
@@ -97,9 +116,28 @@ public class GameBoard {
 
         // Setup a cursor button input callback, it will be called every time the cursor is clicked
         glfwSetMouseButtonCallback(window, (window, button, action, mods) -> {
-            if(isDrawer){
+            // get cursor position,
+            DoubleBuffer posX = BufferUtils.createDoubleBuffer(1);
+            DoubleBuffer posY = BufferUtils.createDoubleBuffer(1);
+            glfwGetCursorPos(window, posX, posY);
+            // set/cancel ready if clicked ready
+            if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS && withinReadyButtonRegion(posX.get(0), posY.get(0))){
+                boolean readyState = gameState.getPlayerMyself().isReady();
+                gameState.getPlayerMyself().setReady(!readyState);
+                graphicInterface.reportPlayerReady(gameState.getPlayerId(),!readyState);
+                return;
+            }
+
+            if(gameState.isDrawer()){
+                //drop this callback if it's not in drawable region
+                if(!withinDrawableRegion(posX.get(0), posY.get(0))) {
+                    return;
+                }
+
                 if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS){
                     isMouseClicked = true;
+                    addSeparatorToDrawnList();
+                    reportDrawnPoint(Double.MAX_VALUE, Double.MAX_VALUE);
                 }else if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE){
                     isMouseClicked = false;
                     addSeparatorToDrawnList();
@@ -149,21 +187,33 @@ public class GameBoard {
         // Set the clear color
         glClearColor( 1f, 1f, 1f, 1.0f);
         drawnPoints.clear();
+        initPlayerFrameCenter();
+        initDrawableRegion();
 
         // Run the rendering loop until the user has attempted to close
         // the window or has pressed the ESCAPE key.
         while ( !glfwWindowShouldClose(window) ) {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the framebuffer
 
+            //myFont.drawString(100, 50, "THE LIGHTWEIGHT JAVA GAMES LIBRARY", Color.yellow);
+            //GraphicUtils.drawString("Hello world !", 400,300);
+            glEnable(GL_LINE_WIDTH);
+            glLineWidth(2);
             renderGameFrame();
-
+            renderPlayerFrame();
+            renderDrawableRegionFrame();
             renderDrawing();
+            glDisable(GL_LINE_WIDTH);
+
+            renderPlayerInfo();
+            renderReadyButton();
 
             glfwSwapBuffers(window); // swap the color buffers
 
             // Poll for window events. The key callback above will only be
             // invoked during this call.
             glfwPollEvents();
+
         }
     }
 
@@ -201,6 +251,28 @@ public class GameBoard {
         graphicInterface.reportDrawnPoint(x, y);
     }
 
+    private void initPlayerFrameCenter(){
+        int maxPlayerNum = playerFrameCenter.length;
+        double widthMax = windowWidth - readyButtonSpace;
+        playerFrameSideWidth = widthMax / maxPlayerNum;
+        for(int i=0; i<maxPlayerNum; i++){
+            playerFrameCenter[i][0] = gameFrameOffset + playerFrameSideWidth / 2  + playerFrameSideWidth * i;
+            playerFrameCenter[i][1] = - gameFrameOffset + windowHeight - playerFrameSideWidth / 2;
+        }
+    }
+
+    private void initDrawableRegion(){
+        drawableRegion = new double[4][2];
+        drawableRegion[0][0] = gameFrameOffset;
+        drawableRegion[0][1] = gameFrameOffset;
+        drawableRegion[1][0] = windowWidth - gameFrameOffset;
+        drawableRegion[1][1] = gameFrameOffset;
+        drawableRegion[2][0] = windowWidth - gameFrameOffset;
+        drawableRegion[2][1] = windowHeight - gameFrameOffset - playerFrameSideWidth;
+        drawableRegion[3][0] = gameFrameOffset;
+        drawableRegion[3][1] = windowHeight - gameFrameOffset - playerFrameSideWidth;
+    }
+
     private void renderOnePoint(double x, double y){
         double centerX = x;
         double centerY = windowHeight - y;
@@ -220,27 +292,150 @@ public class GameBoard {
         }
     }
 
-    private void renderGameFrame(){
-        float offset = 20;
-        glColor4f(0, 0, 0, 0);
+    private void renderSquareLineLoop(double centerX, double centerY, double r){
+        renderRecLineLoop(centerX, centerY, r, r);
+        /*
+        centerY = windowHeight - centerY;
+        glColor3f(0, 0, 0);
         glBegin(GL_LINE_LOOP);
-        glVertex2f( 0+offset, 0+offset );
-        glVertex2f( 0+offset, windowHeight-offset );
-        glVertex2f( windowWidth-offset, windowHeight-offset );
-        glVertex2f( windowWidth-offset, 0+offset );
+        glVertex2d( centerX - r, centerY + r);
+        glVertex2d( centerX + r, centerY + r);
+        glVertex2d( centerX + r, centerY - r);
+        glVertex2d( centerX - r, centerY - r);
+        glEnd();
+        */
+    }
+
+    private void renderRecLineLoop(double centerX, double centerY, double offsetX, double offsetY){
+        centerY = windowHeight - centerY;
+        glColor3f(0, 0, 0);
+        glBegin(GL_LINE_LOOP);
+        glVertex2d( centerX - offsetX, centerY + offsetY);
+        glVertex2d( centerX + offsetX, centerY + offsetY);
+        glVertex2d( centerX + offsetX, centerY - offsetY);
+        glVertex2d( centerX - offsetX, centerY - offsetY);
         glEnd();
     }
 
-    public void setThisDrawer() {
-        isDrawer = true;
+    private void renderGameFrame(){
+        // general game frame
+        double offset = gameFrameOffset;
+        glColor3f(0, 0, 0);
+        glBegin(GL_LINE_LOOP);
+        glVertex2d( 0+offset, 0+offset );
+        glVertex2d( 0+offset, windowHeight-offset );
+        glVertex2d( windowWidth-offset, windowHeight-offset );
+        glVertex2d( windowWidth-offset, 0+offset );
+        glEnd();
     }
 
-    public void cancelDrawer(){
-        isDrawer = false;
+    private void renderDrawableRegionFrame(){
+        glColor3f(0, 0, 0);
+        glBegin(GL_LINE_LOOP);
+        glVertex2d( drawableRegion[0][0], windowHeight - drawableRegion[0][1]);
+        glVertex2d( drawableRegion[1][0], windowHeight - drawableRegion[1][1]);
+        glVertex2d( drawableRegion[2][0], windowHeight - drawableRegion[2][1]);
+        glVertex2d( drawableRegion[3][0], windowHeight - drawableRegion[3][1]);
+        glEnd();
+    }
+
+    private void renderPlayerFrame(){
+        for(int i=0; i<playerFrameCenter.length; i++){
+            renderSquareLineLoop(playerFrameCenter[i][0], playerFrameCenter[i][1], playerFrameSideWidth/2);
+        }
+    }
+
+    private void renderPlayerInfo(){
+        for(Map.Entry<String, Player> entry : gameState.getPlayersMap().entrySet()){
+            Player player = entry.getValue();
+            int pos = player.getPosition();
+            String name = player.getName();
+            int points = player.getPoints();
+            boolean ready = player.isReady();
+            // name
+            GraphicUtils.drawString(
+                    name,
+                    (int) playerFrameCenter[pos][0],
+                    windowHeight - (int) playerFrameCenter[pos][1] + 30
+            );
+
+            // points
+            GraphicUtils.drawString(
+                    Integer.toString(points),
+                    (int) playerFrameCenter[pos][0],
+                    windowHeight - (int) playerFrameCenter[pos][1] + 8
+            );
+
+            // ready
+            if(ready){
+                GraphicUtils.drawString(
+                        "ready",
+                        (int) playerFrameCenter[pos][0],
+                        windowHeight - (int) playerFrameCenter[pos][1] - 20,
+                        0,1,0
+                );
+            }else{
+                GraphicUtils.drawString(
+                        "Not",
+                        (int) playerFrameCenter[pos][0],
+                        windowHeight - (int) playerFrameCenter[pos][1] - 16,
+                        1,0,0
+                );
+                GraphicUtils.drawString(
+                        "Ready",
+                        (int) playerFrameCenter[pos][0],
+                        windowHeight - (int) playerFrameCenter[pos][1] - 30,
+                        1,0,0
+                );
+            }
+
+        }
+    }
+
+    private void renderReadyButton(){
+        double startX = playerFrameCenter[playerFrameCenter.length - 1][0] + playerFrameSideWidth / 2;
+        double endX = windowWidth - gameFrameOffset;
+        //startX += 20;
+        //endX -= 20;
+        double centerX = (startX + endX) / 2;
+        double centerY = playerFrameCenter[playerFrameCenter.length - 1][1];
+        renderRecLineLoop(centerX, centerY, (endX - startX)/2 - 40, playerFrameSideWidth / 2 - 20);
+
+
+        if(gameState.getPlayerMyself().isReady()){
+            GraphicUtils.drawString("Cancel", (int) centerX, windowHeight - (int) centerY, 1,0,0);
+        }else{
+            GraphicUtils.drawString("Ready", (int) centerX, windowHeight - (int) centerY, 0,1,0);
+        }
     }
 
     public void clearCanvas(){
         drawnPoints.clear();
+    }
+
+
+    public boolean withinDrawableRegion(double x, double y){
+        double leftMost = gameFrameOffset;
+        double rightMost = windowWidth - gameFrameOffset;
+        double upMost = gameFrameOffset;
+        double downMost = windowHeight - gameFrameOffset - playerFrameSideWidth;
+        if(x <= leftMost || x >= rightMost) return false;
+        if(y <= upMost || y >= downMost) return false;
+        return true;
+    }
+
+    public boolean withinReadyButtonRegion(double x, double y){
+        double startX = playerFrameCenter[playerFrameCenter.length - 1][0] + playerFrameSideWidth / 2;
+        double endX = windowWidth - gameFrameOffset;
+        double centerX = (startX + endX) / 2;
+        double centerY = playerFrameCenter[playerFrameCenter.length - 1][1];
+        double offsetX = (endX - startX)/2 - 40;
+        double offsetY = playerFrameSideWidth / 2 - 20;
+
+
+        if(x <= centerX - offsetX || x >= centerX + offsetX) return false;
+        if(y <= centerY - offsetY || y >= centerY + offsetY) return false;
+        return true;
     }
 
     public static void main(String[] args) {
