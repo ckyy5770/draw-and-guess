@@ -206,7 +206,8 @@ public class GameBoard {
             glDisable(GL_LINE_WIDTH);
 
             renderPlayerInfo();
-            renderReadyButton();
+            if(gameState.isGameOn()) renderGameHelper();
+            else renderReadyButton();
 
             glfwSwapBuffers(window); // swap the color buffers
 
@@ -366,28 +367,49 @@ public class GameBoard {
                     windowHeight - (int) playerFrameCenter[pos][1] + 8
             );
 
-            // ready
-            if(ready){
-                GraphicUtils.drawString(
-                        "ready",
-                        (int) playerFrameCenter[pos][0],
-                        windowHeight - (int) playerFrameCenter[pos][1] - 20,
-                        0,1,0
-                );
+            // ready state
+            if(!gameState.isGameOn()){
+                if(ready){
+                    GraphicUtils.drawString(
+                            "ready",
+                            (int) playerFrameCenter[pos][0],
+                            windowHeight - (int) playerFrameCenter[pos][1] - 20,
+                            0,1,0
+                    );
+                }else{
+                    GraphicUtils.drawString(
+                            "Not",
+                            (int) playerFrameCenter[pos][0],
+                            windowHeight - (int) playerFrameCenter[pos][1] - 16,
+                            1,0,0
+                    );
+                    GraphicUtils.drawString(
+                            "Ready",
+                            (int) playerFrameCenter[pos][0],
+                            windowHeight - (int) playerFrameCenter[pos][1] - 30,
+                            1,0,0
+                    );
+                }
             }else{
-                GraphicUtils.drawString(
-                        "Not",
-                        (int) playerFrameCenter[pos][0],
-                        windowHeight - (int) playerFrameCenter[pos][1] - 16,
-                        1,0,0
-                );
-                GraphicUtils.drawString(
-                        "Ready",
-                        (int) playerFrameCenter[pos][0],
-                        windowHeight - (int) playerFrameCenter[pos][1] - 30,
-                        1,0,0
-                );
+                // guesser drawer state
+                boolean isDrawer = gameState.getDrawerId().equals(player.getId());
+                if(isDrawer){
+                    GraphicUtils.drawString(
+                            "drawer",
+                            (int) playerFrameCenter[pos][0],
+                            windowHeight - (int) playerFrameCenter[pos][1] - 20,
+                            0,1,0
+                    );
+                }else{
+                    GraphicUtils.drawString(
+                            "guesser",
+                            (int) playerFrameCenter[pos][0],
+                            windowHeight - (int) playerFrameCenter[pos][1] - 20,
+                            1,0,0
+                    );
+                }
             }
+
 
         }
     }
@@ -402,10 +424,31 @@ public class GameBoard {
         renderRecLineLoop(centerX, centerY, (endX - startX)/2 - 40, playerFrameSideWidth / 2 - 20);
 
 
+        if(gameState.getPlayerMyself() == null){
+            GraphicUtils.drawString("Connecting", (int) centerX, windowHeight - (int) centerY, 0,1,0);
+            return;
+        }
+
         if(gameState.getPlayerMyself().isReady()){
             GraphicUtils.drawString("Cancel", (int) centerX, windowHeight - (int) centerY, 1,0,0);
         }else{
             GraphicUtils.drawString("Ready", (int) centerX, windowHeight - (int) centerY, 0,1,0);
+        }
+    }
+
+    private void renderGameHelper(){
+        double startX = playerFrameCenter[playerFrameCenter.length - 1][0] + playerFrameSideWidth / 2;
+        double endX = windowWidth - gameFrameOffset;
+        //startX += 20;
+        //endX -= 20;
+        double centerX = (startX + endX) / 2;
+        double centerY = playerFrameCenter[playerFrameCenter.length - 1][1];
+        //renderRecLineLoop(centerX, centerY, (endX - startX)/2 - 40, playerFrameSideWidth / 2 - 20);
+
+        if(gameState.isDrawer()){
+            GraphicUtils.drawString(gameState.getWord(), (int) centerX, windowHeight - (int) centerY, 0,0,0);
+        }else{
+            GraphicUtils.drawString("Hint", (int) centerX, windowHeight - (int) centerY, 0,1,0);
         }
     }
 

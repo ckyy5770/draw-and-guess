@@ -44,4 +44,8 @@ public class Player {
     public int getPoints() {
         return points;
     }
+
+    public String getIp() {
+        return ip;
+    }
 }

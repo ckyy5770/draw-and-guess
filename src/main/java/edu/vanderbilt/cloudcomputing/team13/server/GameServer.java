@@ -1,5 +1,6 @@
 package edu.vanderbilt.cloudcomputing.team13.server;
 
+import edu.vanderbilt.cloudcomputing.team13.client.GameState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.zeromq.ZMQ;
@@ -34,7 +35,7 @@ public class GameServer implements Runnable{
     // a responder to every player
     private ZMQ.Socket gameResponder;
     // a list of players <id, player>
-    private ConcurrentHashMap<String, Player> playersMap;
+    private GameState gameState = new GameState();
 
     // thread pool
     private ExecutorService threadPool;
@@ -87,8 +88,10 @@ public class GameServer implements Runnable{
     private void responder(){
         while(!Thread.currentThread().isInterrupted()){
             //  Wait for next request from client
-            byte[] request = gameResponder.recv(0);
-            String reqStr = new String(request);
+            String reqStr = gameResponder.recvStr();
+            if(reqStr == null){
+                logger.fatal("received null");
+            }
             logger.debug("request received: {}", reqStr);
             tryRespond(reqStr);
         }
@@ -98,10 +101,12 @@ public class GameServer implements Runnable{
         String[] splited = reqStr.split("@");
         AbstractAction handler = requestHandler.get(splited[0]);
         if(handler == null){
-            logger.warn("invalid request: {}", reqStr);
+            logger.warn("invalid request");
             gameResponder.send("ERROR");
+            logger.debug("replied req: {}, ERROR", reqStr);
         }else{
             gameResponder.send("OK");
+            logger.debug("replied req: {}, OK", reqStr);
             handler.setPara(splited[1]);
             threadPool.submit(handler);
         }
@@ -171,9 +176,28 @@ public class GameServer implements Runnable{
                 logger.warn("invalid parameter for setupNewPlayer.");
             } else {
                 // check if there is enough space
-                if (playersMap.size() <= MAX_PLAYER) {
-                    gamePub.sendMore("ServerNewPlayer");
-                    gamePub.send(para);
+                if (gameState.getCurPlayerNum() <= MAX_PLAYER) {
+                    // add new player to list
+                    String[] splited = para.split("%");
+                    String playerId = splited[0];
+                    String playerIp = splited[1];
+                    String playerName = splited[2];
+                    String position = Integer.toString(gameState.getCurPlayerNum());
+                    gameState.addPlayer(playerIp, playerName, playerId, position);
+
+                    // sent list to all players
+                    StringBuilder para = new StringBuilder();
+                    // compile the new para string
+                    for(Map.Entry<String, Player> entry : gameState.getPlayersMap().entrySet()){
+                        Player player = entry.getValue();
+                        String curInfo = player.getId() + "%" + player.getIp() + "%" + player.getName() + "%" + player.getPosition();
+                        para.append("|");
+                        para.append(curInfo);
+                    }
+                    para.deleteCharAt(0);
+
+                    gamePub.sendMore("ServerNewPlayerList");
+                    gamePub.send(para.toString());
                 }
             }
         }
@@ -197,11 +221,11 @@ public class GameServer implements Runnable{
 
                 String[] splited = para.split("%");
                 int readyState = Integer.parseInt(splited[1]);
-                playersMap.get(splited[0]).setReady(readyState != 0);
+                gameState.setPlayerReady(splited[0], readyState != 0);
                 gamePub.sendMore("ServerPlayerReady");
                 gamePub.send(para);
                 // if all players are ready, start the game
-                for(Map.Entry<String, Player> entry : playersMap.entrySet()){
+                for(Map.Entry<String, Player> entry : gameState.getPlayersMap().entrySet()){
                     if(!entry.getValue().isReady()){
                         return;
                     }
@@ -210,10 +234,10 @@ public class GameServer implements Runnable{
                 // start the game
                 isGameEnd = false;
                 // randomly pick a drawer and a word
-                int playerNum = playersMap.size();
+                int playerNum = gameState.getCurPlayerNum();
                 int randomNum = ThreadLocalRandom.current().nextInt(0, playerNum);
                 String pickedPlayerID = null;
-                for(Map.Entry<String, Player> entry : playersMap.entrySet()) {
+                for(Map.Entry<String, Player> entry : gameState.getPlayersMap().entrySet()) {
                     randomNum--;
                     if(randomNum < 0){
                         pickedPlayerID = entry.getKey();

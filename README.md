@@ -18,7 +18,9 @@ there are 5 types of messages that server may send:
 
 2. "ServerNewWinner@USER_ID"
 
-3. "ServerNewPlayer@USER_ID%USER_IP%USER_NAME"
+3. "ServerNewPlayer@USER_ID%USER_IP%USER_NAME%POSITION" (deprecate)
+
+3. "ServerNewPlayerList@USER_ID%USER_IP%USER_NAME%POSITION|USER_ID%USER_IP%USER_NAME%POSITION|USER_ID%USER_IP%USER_NAME%POSITION"
 
 4. "ServerPlayerReady@USER_ID"
 

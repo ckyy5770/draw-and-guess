@@ -1,6 +1,7 @@
 package edu.vanderbilt.cloudcomputing.team13.client;
 
 
+import com.sun.org.apache.regexp.internal.RE;
 import edu.vanderbilt.cloudcomputing.team13.client.GameBoard;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,6 +21,7 @@ import java.util.concurrent.Executors;
  */
 public class GameClient implements Runnable{
     private static final Logger logger = LogManager.getLogger(GameClient.class.getName());
+    private static final Object REQUEST_LOCK = new Object();
     // this context is shared among all zmq sockets in this app
     private ZMQ.Context context;
     // ip address of host machine
@@ -134,7 +136,8 @@ public class GameClient implements Runnable{
 
 
     private void initGame(String playerName){
-        gameState.addPlayerMySelf(ip, playerName, ip + ":" + playerName);
+        //gameState.addPlayerMySelf(ip, playerName, ip + ":" + playerName);
+        gameState.setPlayerId(ip + ":" + playerName);
         gameState.setGameEnd(true);
 
         AbstractAction action = commandHandler.get("CliNewPlayer");
@@ -151,7 +154,7 @@ public class GameClient implements Runnable{
         commandHandler.put("CliNewPlayer", new reportNewPlayer());
         commandHandler.put("CliPlayerReady", new reportPlayerReady());
         // respond to the request from server
-        commandHandler.put("ServerNewPlayer", new setupNewPlayer());
+        commandHandler.put("ServerNewPlayerList", new setupNewPlayerList());
         commandHandler.put("ServerNewWinner", new setupNewWinner());
         commandHandler.put("ServerPlayerReady", new setPlayerReady());
         commandHandler.put("ServerNewPoint", new drawNewPoint());
@@ -172,8 +175,12 @@ public class GameClient implements Runnable{
                 logger.warn("invalid parameter for reportNewPoint.");
             }else{
                 String request = "CliNewPoint@" + para;
-                gameRequester.send(request,0);
-                String reply = gameRequester.recvStr();
+                String reply = null;
+                // REQUEST-REPLY SHOULD BE PROTECTED BY LOCK
+                synchronized (REQUEST_LOCK){
+                    gameRequester.send(request);
+                    reply = gameRequester.recvStr();
+                }
                 logger.debug("sent req: {}, received rep: {}", request, reply);
             }
         }
@@ -193,9 +200,11 @@ public class GameClient implements Runnable{
                 logger.warn("invalid parameter for reportNewWinner.");
             }else{
                 String request = "CliNewWinner@" + para;
-                gameRequester.send(request,0);
-                byte[] bytes = gameRequester.recv(0);
-                String reply = new String(bytes);
+                String reply = null;
+                synchronized (REQUEST_LOCK){
+                    gameRequester.send(request);
+                    reply = gameRequester.recvStr();
+                }
                 logger.debug("sent req: {}, received rep: {}", request, reply);
             }
         }
@@ -215,10 +224,12 @@ public class GameClient implements Runnable{
                 logger.warn("invalid parameter for reportNewPlayer.");
             }else{
                 String request = "CliNewPlayer@" + para;
+                String reply = null;
+                synchronized (REQUEST_LOCK){
+                    gameRequester.send(request);
+                    reply= gameRequester.recvStr();
+                }
                 logger.debug("sent req: {}", request);
-                gameRequester.send(request,0);
-                byte[] bytes = gameRequester.recv(0);
-                String reply = new String(bytes);
                 logger.debug("received rep: {}", reply);
             }
         }
@@ -238,14 +249,17 @@ public class GameClient implements Runnable{
                 logger.warn("invalid parameter for reportPlayerReady.");
             }else{
                 String request = "CliPlayerReady@" + para;
-                gameRequester.send(request,0);
-                String reply = gameRequester.recvStr();
+                String reply = null;
+                synchronized (REQUEST_LOCK){
+                    gameRequester.send(request);
+                    reply = gameRequester.recvStr();
+                }
                 logger.debug("sent req: {}, received rep: {}", request, reply);
             }
         }
     }
 
-    private class setupNewPlayer extends AbstractAction{
+    private class setupNewPlayerList extends AbstractAction {
         String para = null;
 
         @Override
@@ -254,19 +268,23 @@ public class GameClient implements Runnable{
         }
 
         @Override
-        public void run(){
-            if(para == null){
-                logger.warn("invalid parameter for setupNewPlayer: null");
-            }else{
-                String[] splited = para.split("%");
-                if(splited.length != 3){
-                    logger.warn("invalid parameter for setupNewPlayer: {}", para);
-                    return;
+        public void run() {
+            if (para == null) {
+                logger.warn("invalid parameter for setupNewPlayerList: null");
+            } else {
+                String[] players = para.split("\\|");
+                for (String player : players) {
+                    String[] splited = player.split("%");
+                    if (splited.length != 4) {
+                        logger.warn("invalid parameter for setupNewPlayerList: {}, {}", para, player);
+                        return;
+                    }
+                    String playerId = splited[0];
+                    String playerIp = splited[1];
+                    String playerName = splited[2];
+                    String playerPosition = splited[3];
+                    gameState.addPlayer(playerIp, playerName, playerId, playerPosition);
                 }
-                String playerId = splited[0];
-                String playerIp = splited[1];
-                String playerName = splited[2];
-                gameState.addPlayer(playerIp, playerName, playerId);
             }
         }
     }

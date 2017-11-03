@@ -32,7 +32,7 @@ public class GameState {
         isGameEnd = gameEnd;
     }
 
-    private void setPlayerId(String playerId) {
+    public void setPlayerId(String playerId) {
         this.playerId = playerId;
     }
 
@@ -40,14 +40,15 @@ public class GameState {
         this.word = word;
     }
 
-    public void addPlayer(String playerIp, String playerName, String playerId){
+    public void addPlayer(String playerIp, String playerName, String playerId, String playerPos){
+        if(playersMap.containsKey(playerId)) return;
         Player player = new Player(playerIp, playerName, playerId);
-        player.setPosition(playersMap.size());
+        player.setPosition(Integer.parseInt(playerPos));
         playersMap.put(playerId, player);
     }
 
-    public void addPlayerMySelf(String playerIp, String playerName, String playerId){
-        addPlayer(playerIp, playerName, playerId);
+    public void addPlayerMySelf(String playerIp, String playerName, String playerId, String playerPos){
+        addPlayer(playerIp, playerName, playerId, playerPos);
         setPlayerId(playerId);
     }
 
@@ -107,5 +108,25 @@ public class GameState {
 
     public ConcurrentHashMap<String, Player> getPlayersMap() {
         return playersMap;
+    }
+
+    public int getCurPlayerNum(){
+        return playersMap.size();
+    }
+
+    public boolean isGameOn(){
+        return !isGameEnd;
+    }
+
+    public String getDrawerId() {
+        return drawerId;
+    }
+
+    public String getWord() {
+        return word;
+    }
+
+    public String getDrawerName(){
+        return playersMap.get(drawerId).getName();
     }
 }
